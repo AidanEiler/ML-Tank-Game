@@ -1,0 +1,23 @@
+# cache stuff
+__pycache__/
+*.py[cod]
+*$py.class
+
+# these are too large to store here
+models/*.zip
+checkpoints/*.zip
+tank_tensorboard/
+tank_recordings/*.mp4
+*.mp4
+
+# this keeps folder structure
+!models/.gitkeep
+!checkpoints/.gitkeep
+!tank_recordings/.gitkeep
+
+# os stuff
+.DS_Store
+*.swp
+
+# ide
+.vscode/
