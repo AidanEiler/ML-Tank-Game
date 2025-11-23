@@ -21,7 +21,7 @@ os.makedirs(models_dir, exist_ok=True) # <--- Creates the folder if it doesn't e
 
 # 1. Create environment
 # Ensure 'tank_combat_env.py' has BOT_DIFFICULTY = 0 for this first run!
-env = TankCombatEnv(render_mode=None)
+env = TankCombatEnv(render_mode="human")
 env = Monitor(env, log_dir) 
 env = DummyVecEnv([lambda: env])
 
