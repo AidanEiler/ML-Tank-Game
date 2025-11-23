@@ -1,18 +1,20 @@
-# cache stuff
+# python cache
 __pycache__/
 *.py[cod]
 *$py.class
 
-# these are too large to store here
+# too large to store
 models/*.zip
 checkpoints/*.zip
+logs/*
 tank_tensorboard/
 tank_recordings/*.mp4
 *.mp4
 
-# this keeps folder structure
+# keep folder structure
 !models/.gitkeep
 !checkpoints/.gitkeep
+!logs/.gitkeep
 !tank_recordings/.gitkeep
 
 # os stuff
