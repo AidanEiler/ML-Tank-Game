@@ -6,7 +6,7 @@ Features:
 - Train Mode (AI vs Bot OR AI vs Self)
 - Watch Mode (Watch trained AI play)
 - Record Mode (Save AI gameplay to MP4)
-- Device Selection (CPU/GPU) with CRASH PROTECTION
+- Device Selection (CPU/GPU) with Smart Fallback
 - Full .zip loading compatibility
 - Interactive Text Menu
 """
@@ -25,13 +25,11 @@ from agent import TankAgent, get_agent_defaults, get_agent_options
 
 
 # =============================================================================
-# HELPER: DEVICE "LIE DETECTOR"
+# HELPER: SMART DEVICE SELECTION
 # =============================================================================
 def get_safe_device(requested_device):
     """
-    1. Checks if user specifically asked for CPU.
-    2. If 'auto' or 'cuda', it attempts a tiny math operation on the GPU.
-    3. If that math fails (e.g. "No Kernel Image"), it forces CPU.
+    Smartly determines the best valid device.
     """
     if requested_device == "cpu":
         return "cpu"
@@ -43,17 +41,13 @@ def get_safe_device(requested_device):
         return "cpu"
 
     # --- THE VIBE CHECK ---
-    # Torch thinks there is a GPU. Let's see if it actually works.
     try:
         # Try to allocate 1 tiny number on the GPU
         x = torch.tensor([1.0], device="cuda")
-        # Try to do math with it
         y = x * 2
-        # If we get here, the GPU is real and working.
         print(f"✅ GPU Verified: {torch.cuda.get_device_name(0)}")
         return "cuda"
     except Exception as e:
-        # This catches your "No Kernel Image" error!
         print(f"⚠️ GPU Hardware Error Detected: {e}")
         print("🔄 Your computer's GPU is incompatible. SWITCHING TO CPU.")
         return "cpu"
@@ -64,7 +58,7 @@ def get_safe_device(requested_device):
 # =============================================================================
 def run_human_play(bot_difficulty, map_style):
     """
-    Human play doesn't use Neural Nets, so it doesn't need device checks.
+    let a human play against the bot using keyboard controls.
     """
     print("\n" + "=" * 50)
     print("human play mode")
@@ -103,15 +97,18 @@ def run_human_play(bot_difficulty, map_style):
         
         action = np.array([0, 0, 0, 0])
         
+        # Body Movement
         if keys[pygame.K_a]: action[0] = 1 
         elif keys[pygame.K_d]: action[0] = 2 
         
         if keys[pygame.K_w]: action[1] = 1 
         elif keys[pygame.K_s]: action[1] = 2 
         
+        # Turret Rotation
         if keys[pygame.K_LEFT]: action[2] = 1  
         elif keys[pygame.K_RIGHT]: action[2] = 2  
         
+        # Fire
         if keys[pygame.K_SPACE]: action[3] = 1 
         
         obs, reward, terminated, truncated, info = env.step(action)
@@ -144,6 +141,7 @@ def run_training(params):
         if params["continue_from"] and params["continue_from"] != "auto":
             load_path = params["continue_from"]
         else:
+            # Auto-infer path for opponent
             style_tag = "walls"
             if params.get("map_style") == "Empty": style_tag = "nowalls"
             
@@ -169,6 +167,7 @@ def run_training(params):
         else:
             print(f"[SELF-PLAY] No model found. Opponent will be Random.")
 
+    # Create Environment
     env = TankCombatEnv(
         bot_difficulty=params["bot_difficulty"],
         map_style=params.get("map_style", "Classic"), 
@@ -179,10 +178,12 @@ def run_training(params):
         opponent_policy=opponent_policy
     )
     
+    # Determine legacy boolean for Agent Naming
     use_walls_bool = True
     if params.get("map_style") == "Empty": 
         use_walls_bool = False
 
+    # Create Agent
     agent = TankAgent(
         level=params["level"],
         walls_variant=use_walls_bool,
@@ -197,11 +198,15 @@ def run_training(params):
     if continue_from == "auto": continue_from = None
     elif continue_from == "none" or continue_from == "": continue_from = None
     
+    # Extract Stop Threshold
+    stop_threshold = params.get("stop_threshold")
+    
     try:
         agent.train(
             env=env,
             timesteps=params["timesteps"],
-            continue_from=continue_from
+            continue_from=continue_from,
+            stop_threshold=stop_threshold
         )
         save_path = agent.save()
         print(f"model saved to: {save_path}.zip")
@@ -257,6 +262,7 @@ def run_watch(params):
         print(f"Match {episode + 1} Started...")
         
         while not (terminated or truncated):
+            # Check for quit
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     env.close()
@@ -297,7 +303,7 @@ def run_record(params):
     env = TankCombatEnv(
         bot_difficulty=params["bot_difficulty"],
         map_style=params["map_style"],
-        render_mode="rgb_array", 
+        render_mode="rgb_array",
         opponent_type="bot"
     )
     
@@ -315,12 +321,13 @@ def run_record(params):
         print("❌ Error: 'imageio' not found. Run: pip install imageio imageio[ffmpeg]")
         return
 
-    for episode in range(3):
+    for episode in range(3): # Record 3 matches
         obs, _ = env.reset()
         terminated = False
         truncated = False
         print(f"Recording Match {episode + 1}...")
         
+        # Capture first frame
         writer.append_data(env.render())
         
         while not (terminated or truncated):
@@ -340,9 +347,14 @@ def run_record(params):
 # =============================================================================
 
 def prompt_with_options(prompt_text, options_info, default_value):
+    """
+    prompt user for input, displaying available options.
+    """
     print(f"\n{prompt_text}")
     print("-" * 40)
+    
     opt_type = options_info.get("type", "str")
+    
     if "choices" in options_info:
         choices = options_info["choices"]
         descriptions = options_info.get("descriptions", {})
@@ -358,18 +370,25 @@ def prompt_with_options(prompt_text, options_info, default_value):
                 choice_display = str(choice)
             if desc: print(f"  {choice_display}: {desc}")
             else: print(f"  {choice_display}")
+    
     elif "range" in options_info:
         range_min, range_max = options_info["range"]
         print(f"range: {range_min} to {range_max}")
+    
     if "description" in options_info:
         print(f"description: {options_info['description']}")
+    
+    # format default display
     if isinstance(default_value, bool):
         default_display = "true" if default_value else "false"
     else:
         default_display = default_value
+    
     print(f"default: {default_display}")
     user_input = input("enter value (or press enter for default): ").strip().lower()
+    
     if user_input == "": return default_value
+    
     if opt_type == "int":
         try: return int(user_input)
         except ValueError: return default_value
@@ -385,6 +404,7 @@ def prompt_with_options(prompt_text, options_info, default_value):
              for choice in options_info["choices"]:
                  if str(choice).startswith(user_input): return choice
         return user_input
+
 
 def interactive_select_action():
     print("=" * 50)
@@ -403,14 +423,17 @@ def interactive_select_action():
     elif user_input.startswith("r"): return "record"
     return "train"
 
+
 def interactive_play():
     env_options = get_environment_options()
     bot_difficulty = prompt_with_options("bot difficulty", env_options["bot_difficulty"], 0)
     map_style = prompt_with_options("map style", env_options["map_style"], "Classic")
     return {"bot_difficulty": bot_difficulty, "map_style": map_style}
 
+
 def interactive_train():
     print("\n>>> training configuration <<<")
+    
     env_defaults = get_environment_defaults()
     env_options = get_environment_options()
     agent_defaults = get_agent_defaults()
@@ -419,8 +442,10 @@ def interactive_train():
     print("\n>>> environment settings <<<")
     bot_difficulty = prompt_with_options("bot difficulty", env_options["bot_difficulty"], env_defaults["bot_difficulty"])
     map_style = prompt_with_options("map style", env_options["map_style"], "Classic")
+    
     render_mode_input = prompt_with_options("render mode", env_options["render_mode"], "none")
     render_mode = None if render_mode_input == "none" else render_mode_input
+    
     grid_size = prompt_with_options("grid size", env_options["grid_size"], env_defaults["grid_size"])
     max_steps = prompt_with_options("max steps", env_options["max_steps"], env_defaults["max_steps"])
     
@@ -435,6 +460,10 @@ def interactive_train():
     device = prompt_with_options("device (cpu/cuda)", agent_options["device"], agent_defaults["device"])
     opponent_type = prompt_with_options("opponent type (bot/self)", {"type": "str", "choices": ["bot", "self"]}, "bot")
     
+    # Threshold prompt
+    stop_threshold = prompt_with_options("stop threshold (avg reward)", {"type": "float"}, "")
+    if stop_threshold == "": stop_threshold = None
+
     return {
         "bot_difficulty": bot_difficulty,
         "map_style": map_style,
@@ -449,7 +478,8 @@ def interactive_train():
         "timesteps": timesteps,
         "continue_from": continue_from,
         "device": device,
-        "opponent_type": opponent_type
+        "opponent_type": opponent_type,
+        "stop_threshold": stop_threshold
     }
 
 def interactive_watch_or_record():
@@ -470,12 +500,14 @@ def interactive_watch_or_record():
         "record_filename": "tank_gameplay.mp4" 
     }
 
+
 def generate_train_command(params):
+    # Map map_style back to legacy walls arg if needed for CLI display
     walls_str = "false" if params.get("map_style") == "Empty" else "true"
     render_str = "none" if params["render_mode"] is None else params["render_mode"]
     continue_str = params["continue_from"] if params["continue_from"] else "auto"
     
-    return (
+    cmd = (
         f"python driver.py --action train "
         f"--bot-difficulty {params['bot_difficulty']} "
         f"--map-style {params['map_style']} "
@@ -492,6 +524,11 @@ def generate_train_command(params):
         f"--device {params['device']} "
         f"--opponent-type {params['opponent_type']}"
     )
+    
+    if params.get("stop_threshold") is not None:
+        cmd += f" --stop-threshold {params['stop_threshold']}"
+        
+    return cmd
 
 
 # =============================================================================
@@ -520,6 +557,7 @@ def parse_args():
     parser.add_argument("--continue-from", type=str, help="model path")
     parser.add_argument("--device", type=str, help="device", default="auto")
     parser.add_argument("--opponent-type", type=str, help="opponent", default="bot")
+    parser.add_argument("--stop-threshold", type=float, help="stop if avg reward > X")
     
     # Record args
     parser.add_argument("--record-filename", type=str, help="output filename", default="tank_gameplay.mp4")
@@ -556,12 +594,14 @@ def main():
     # CLI Mode (if args provided)
     else:
         if action == "play":
+            # Map legacy 'walls' arg to map_style if needed
             style = args.map_style
             if args.walls and args.walls.lower() == "false": style = "Empty"
             run_human_play(args.bot_difficulty, style)
             
         elif action == "train":
             render_mode = None if args.render_mode == "none" else args.render_mode
+            
             style = args.map_style
             if args.walls and args.walls.lower() == "false": style = "Empty"
 
@@ -579,7 +619,8 @@ def main():
                 "timesteps": args.timesteps,
                 "continue_from": args.continue_from,
                 "device": args.device,
-                "opponent_type": args.opponent_type
+                "opponent_type": args.opponent_type,
+                "stop_threshold": args.stop_threshold
             }
             run_training(params)
             
