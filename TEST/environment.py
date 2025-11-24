@@ -321,7 +321,7 @@ class TankCombatEnv(gym.Env):
         truncated = False
         
         # ---  ALWAYS REPEAT 4 FRAMES (FOR MORE STABLE TRAINING AND PLAY) ---
-        repeat_frames = 4 
+        repeat_frames = 8 # change from 4 to 8 
         
         for _ in range(repeat_frames):
             if self.render_mode == "human": self.render()

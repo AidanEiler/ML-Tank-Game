@@ -1,15 +1,23 @@
 # INITIAL
-# 1. Create Environment
+
+# 1. Create Environment and activate it
 ```bash
 conda create -n tank_ai python=3.10 -y
 ```
 ```bash
 conda activate tank_ai
 ```
+
+# install python packages
 ```bash
-pip install gymnasium pygame stable-baselines3 numpy tensorboard
-pip install moviepy
+pip install -r -requirements.txt
 ```
+
+# Launch GUI and select mode
+```bash
+python launcher.py
+```
+
 
 # DAILY-USE
 ```bash
@@ -17,7 +25,3 @@ conda activate tank_ai
 cd /YOUR/SPECIFIC/FILE/PATH/Tank_Game
 ```
 
-
-# Step 1: Test the game works
-python play_human.py
-# Play a few rounds, make sure controls feel good, and BOT is correct.
