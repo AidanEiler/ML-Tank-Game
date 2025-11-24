@@ -9,10 +9,43 @@ provides a wrapper around stable-baselines3 PPO model with:
 """
 
 import os
+import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
+from stable_baselines3.common.results_plotter import load_results, ts2xy
+
+# --- NEW CALLBACK CLASS ---
+class StopOnRewardCallback(BaseCallback):
+    """
+    Stop training when the mean reward (over last 100 episodes) reaches a threshold.
+    """
+    def __init__(self, threshold: float, check_freq: int = 10000, log_dir: str = None, verbose=1):
+        super().__init__(verbose)
+        self.threshold = threshold
+        self.check_freq = check_freq
+        self.log_dir = log_dir
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.check_freq == 0:
+            try:
+                # Load stats from the monitor.csv
+                x, y = ts2xy(load_results(self.log_dir), "timesteps")
+                if len(x) < 100: return True
+
+                mean_reward = np.mean(y[-100:])
+                
+                if self.verbose > 0:
+                    print(f"Step: {self.num_timesteps} | Mean Reward: {mean_reward:.2f} | Threshold: {self.threshold}")
+
+                if mean_reward > self.threshold:
+                    print(f"\n🎉 Stopping training! Mean reward {mean_reward:.2f} > threshold {self.threshold}")
+                    return False # Stop training
+            except:
+                pass # Ignore errors reading log files
+
+        return True
 
 
 class TankAgent:
@@ -78,9 +111,9 @@ class TankAgent:
             return False
         return os.path.exists(prev_path + ".zip")
     
-    def train(self, env, timesteps, continue_from=None, checkpoint_freq=50000):
+    def train(self, env, timesteps, continue_from=None, checkpoint_freq=50000, stop_threshold=None):
         """
-        train the agent.
+        train the agent with optional early stopping.
         """
         # wrap environment for stable-baselines3
         monitored_env = Monitor(env, self.log_dir)
@@ -111,11 +144,22 @@ class TankAgent:
             print("creating fresh model")
             self.model = self._create_fresh_model(vec_env)
         
-        checkpoint_callback = CheckpointCallback(
+        # Build Callbacks
+        callbacks = []
+        
+        callbacks.append(CheckpointCallback(
             save_freq=checkpoint_freq,
             save_path=self.checkpoint_dir,
             name_prefix=self._get_model_name()
-        )
+        ))
+        
+        if stop_threshold is not None:
+            print(f"🛑 Early Stopping Enabled: Threshold = {stop_threshold}")
+            callbacks.append(StopOnRewardCallback(
+                threshold=stop_threshold,
+                check_freq=10000,
+                log_dir=self.log_dir
+            ))
         
         print(f"starting training for {timesteps} timesteps...")
         print(f"  level: {self.level}")
@@ -127,7 +171,7 @@ class TankAgent:
         
         self.model.learn(
             total_timesteps=timesteps,
-            callback=checkpoint_callback,
+            callback=callbacks,
             tb_log_name=tb_log_name
         )
         
