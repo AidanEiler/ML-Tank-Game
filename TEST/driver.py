@@ -77,7 +77,8 @@ def run_human_play(bot_difficulty, map_style):
         map_style=map_style, 
         render_mode="human",
         opponent_type="policy", # changed from 'bot' to human plays against RL agent
-        opponent_policy= opponent_policy
+        opponent_policy= opponent_policy,
+        agent_type = "human",
 
     )
     

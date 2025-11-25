@@ -147,7 +147,8 @@ class TankCombatEnv(gym.Env):
         grid_size=600, 
         max_steps=3000, 
         opponent_type="bot", 
-        opponent_policy=None
+        opponent_policy=None,
+        agent_type="Policy" # use as label in the game
     ):
         super().__init__()
         
@@ -158,6 +159,7 @@ class TankCombatEnv(gym.Env):
         self.bot_difficulty = bot_difficulty
         self.max_steps = max_steps
         self.map_style = map_style 
+        self.agent_type = agent_type
         
         self.action_space = spaces.MultiDiscrete([3, 3, 3, 2])
         
@@ -530,8 +532,8 @@ class TankCombatEnv(gym.Env):
                 text = self.font.render(label, True, (200, 200, 200))
                 canvas.blit(text, (int(pos[0]-10), int(pos[1]-40)))
         
-        draw_tank(self.t1_pos, self.t1_body_angle, self.t1_turret_angle, (60, 120, 255), "P1")
-        draw_tank(self.t2_pos, self.t2_body_angle, self.t2_turret_angle, (255, 80, 80), "P2")
+        draw_tank(self.t1_pos, self.t1_body_angle, self.t1_turret_angle, (60, 120, 255), self.agent_type) # previously P1
+        draw_tank(self.t2_pos, self.t2_body_angle, self.t2_turret_angle, (255, 80, 80), self.opponent_type) # Previously P2
         
         for b, c in [(self.bullet1, (255, 255, 100)), (self.bullet2, (255, 100, 100))]:
             if b["active"]:
